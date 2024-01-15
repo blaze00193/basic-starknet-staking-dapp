@@ -1,5 +1,4 @@
 use starknet::ContractAddress;
-use bwc_erc20_token::bwc_staking_contract;
 
 //  #[derive(Drop,storage_access::StorageAccess)]
 // struct StakeDetail {
@@ -10,9 +9,12 @@ use bwc_erc20_token::bwc_staking_contract;
 
 #[starknet::interface]
 trait StakingTokenTrait<TContractState> {
-    // fn depositBWC(ref self: TContractState, amount: u256) -> bool;
-    fn stakeBWCToken(ref self: TContractState, amount: u256, BWCERC20TokenAddr: ContractAddress);
-    fn withdrawBWCToken(ref self: TContractState, amount: u256, BWCERC20TokenAddr: ContractAddress);
+    fn stake_bwc_token(
+        ref self: TContractState, amount: u256, BWCERC20TokenAddr: ContractAddress
+    ) -> bool;
+    fn withdraw_bwc_token(
+        ref self: TContractState, amount: u256, BWCERC20TokenAddr: ContractAddress
+    ) -> bool;
     fn getUserBalance(self: @TContractState) -> u256;
 // fn getStakeDetailsByAddress(self: @ContractState, account:ContractAddress) -> StakeDetail;
 }
@@ -94,9 +96,9 @@ mod BWCStakingContract {
         //             amount: u256
         //         )
         // }
-        fn stakeBWCToken(
+        fn stake_bwc_token(
             ref self: ContractState, amount: u256, BWCERC20TokenAddr: ContractAddress
-        ) {
+        ) -> bool {
             let caller: ContractAddress = get_caller_address();
             let address_this = get_contract_address();
             assert(
@@ -131,11 +133,12 @@ mod BWCStakingContract {
                 }
             }
             self.emit(Event::TokenStaked(TokenStaked { staker: caller, amount, time: stake_time }));
+            true
         }
 
-        fn withdrawBWCToken(
+        fn withdraw_bwc_token(
             ref self: ContractState, amount: u256, BWCERC20TokenAddr: ContractAddress
-        ) {
+        ) -> bool {
             let caller = get_caller_address();
             let stake_amount = self.staker.read(caller).amount;
             let stake_time = self.staker.read(caller).timeStaked;
@@ -164,6 +167,7 @@ mod BWCStakingContract {
                 .emit(
                     Event::TokenWithdraw(TokenWithdraw { staker: caller, amount, time: stake_time })
                 );
+            true
         }
 
         fn getUserBalance(self: @ContractState) -> u256 {
