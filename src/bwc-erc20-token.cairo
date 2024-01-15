@@ -155,15 +155,18 @@ mod BWCERC20Token {
             amount: u256
         ) {
             let caller = get_caller_address();
-            let my_allowance = self.allowances.read((sender, recipient));
-            assert(my_allowance <= amount, 'Amount Not Allowed');
+            let my_allowance = self.allowances.read((sender, caller));
+
+            assert(my_allowance > 0, 'You have no token approved');
+            assert(amount <= my_allowance, 'Amount Not Allowed');
+            // assert(my_allowance <= amount, 'Amount Not Allowed');
+
             self
                 .spend_allowance(
                     sender, caller, amount
                 ); //responsible for deduction of the amount allowed to spend
             self.transfer_helper(sender, recipient, amount);
         }
-
         fn approve(ref self: ContractState, spender: ContractAddress, amount: u256) {
             let caller = get_caller_address();
             self.approve_helper(caller, spender, amount);
