@@ -1,0 +1,1 @@
+export {default as bwcAbi} from './bwc_abi.json';
