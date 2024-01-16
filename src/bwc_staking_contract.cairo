@@ -1,12 +1,5 @@
 use starknet::ContractAddress;
 
-//  #[derive(Drop,storage_access::StorageAccess)]
-// struct StakeDetail {
-//     timeStaked: u64,
-//     amount: u256,
-//     status:bool,
-// }
-
 #[starknet::interface]
 trait StakingTokenTrait<TContractState> {
     fn stake_bwc_token(
@@ -16,7 +9,6 @@ trait StakingTokenTrait<TContractState> {
         ref self: TContractState, amount: u256, BWCERC20TokenAddr: ContractAddress
     ) -> bool;
     fn getUserBalance(self: @TContractState) -> u256;
-// fn getStakeDetailsByAddress(self: @ContractState, account:ContractAddress) -> StakeDetail;
 }
 
 #[starknet::contract]
@@ -24,12 +16,11 @@ mod BWCStakingContract {
     /////////////////////////////
     //LIBRARY IMPORTS
     /////////////////////////////
+    use starknet::{ContractAddress, get_caller_address, get_contract_address, get_block_timestamp};
 
-    use starknet::ContractAddress;
-    use starknet::{get_caller_address, get_contract_address, get_block_timestamp};
-    use new_syntax::interfaces::IBWCERC20TokenDispatcherTrait;
-    use new_syntax::interfaces::IBWCERC20TokenDispatcher;
-    use integer::Into;
+    use basic_staking_dapp::bwc_erc20_token::IERC20Dispatcher;
+    use basic_staking_dapp::bwc_erc20_token::IERC20DispatcherTrait;
+    //use integer::Into;
     use core::serde::Serde;
     use core::integer::u64;
 
@@ -37,7 +28,7 @@ mod BWCStakingContract {
     //STAKING DETAIL
     /////////////////////
     // #[derive(Drop)]
-    #[derive(Drop, storage_access::StorageAccess)]
+    #[derive(Copy, Drop, Serde, starknet::Store)]
     struct StakeDetail {
         timeStaked: u64,
         amount: u256,
@@ -87,26 +78,18 @@ mod BWCStakingContract {
 
     #[external(v0)]
     impl StakingTokenTraitImpl of super::StakingTokenTrait<ContractState> {
-        // fn depositBWC(ref self: ContractState, amount: u256) -> bool {
-        //     IBWCERC20TokenDispatcher { contract_address: BWCERC20TokenAddr }
-        //         .transfer_from(
-        //             contract_address = reward_token_address,
-        //             sender = caller_address,
-        //             recipient = contract_address,
-        //             amount: u256
-        //         )
-        // }
         fn stake_bwc_token(
             ref self: ContractState, amount: u256, BWCERC20TokenAddr: ContractAddress
         ) -> bool {
             let caller: ContractAddress = get_caller_address();
             let address_this = get_contract_address();
             assert(
-                (IBWCERC20TokenDispatcher { contract_address: BWCERC20TokenAddr }
-                    .get_balance_of(caller) >= amount),
-                'BWCERC20Token:Insufficient Balance'
+                (IERC20Dispatcher { contract_address: BWCERC20TokenAddr }
+                    .balance_of(caller) >= amount),
+                ''
+            //'BWCERC20Token:Insufficient Balance'
             );
-            IBWCERC20TokenDispatcher { contract_address: BWCERC20TokenAddr }
+            IERC20Dispatcher { contract_address: BWCERC20TokenAddr }
                 .transfer_from(caller, address_this, amount);
             let stake_status: bool = self.staker.read(caller).status;
             let stake_time: u64 = self.staker.read(caller).timeStaked;
@@ -122,8 +105,7 @@ mod BWCStakingContract {
                     stake.amount -= amount;
                     stake.timeStaked = get_block_timestamp();
                 }
-                IBWCERC20TokenDispatcher { contract_address: BWCERC20TokenAddr }
-                    .transfer(caller, amount);
+                IERC20Dispatcher { contract_address: BWCERC20TokenAddr }.transfer(caller, amount);
                 stake.timeStaked = get_block_timestamp();
 
                 if stake.amount > 0 {
@@ -154,8 +136,7 @@ mod BWCStakingContract {
                 stake.amount = stake.amount - amount;
                 stake.timeStaked = get_block_timestamp();
             }
-            IBWCERC20TokenDispatcher { contract_address: BWCERC20TokenAddr }
-                .transfer(caller, amount);
+            IERC20Dispatcher { contract_address: BWCERC20TokenAddr }.transfer(caller, amount);
             stake.timeStaked = get_block_timestamp();
 
             if stake.amount > 0 {

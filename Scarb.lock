@@ -2,13 +2,13 @@
 version = 1
 
 [[package]]
-name = "snforge_std"
-version = "0.14.0"
-source = "git+https://github.com/foundry-rs/starknet-foundry?tag=v0.14.0#e8cbecee4e31ed428c76d5173eaa90c8df796fe3"
-
-[[package]]
-name = "stakin"
+name = "basic_staking_dapp"
 version = "0.1.0"
 dependencies = [
  "snforge_std",
 ]
+
+[[package]]
+name = "snforge_std"
+version = "0.14.0"
+source = "git+https://github.com/foundry-rs/starknet-foundry?tag=v0.14.0#e8cbecee4e31ed428c76d5173eaa90c8df796fe3"

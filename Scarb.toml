@@ -1,5 +1,5 @@
 [package]
-name = "stakin"
+name = "basic_staking_dapp"
 version = "0.1.0"
 edition = "2023_10"
 
