@@ -67,6 +67,24 @@ mod BWCERC20Token {
         value: u256,
     }
 
+    /////////////////
+    //CUSTOM ERRORS
+    /////////////////
+    mod Errors {
+        const TRANSFER_ADDRESS_ZERO: felt252 = 'Transfer to zero address';
+        const OWNER_ADDRESS: felt252 = 'Owner cant be zero address';
+        const CALLER_NOT_OWNER: felt252 = 'Caller not owner';
+        const ADDRESS_ZERO: felt252 = 'Adddress zero';
+        const INSUFFICIENT_FUND: felt252 = 'Insufficient fund';
+        const APPROVED_TOKEN: felt252 = 'You have no token approved';
+        const AMOUNT_NOT_ALLOWED: felt252 = 'Amount not allowed';
+        const MSG_SENDER_NOT_OWNER: felt252 = 'Msg_sender not owner';
+        const TRANSFER_FROM_ADDRESS_ZERO: felt252 = 'Transfer from 0';
+        const TRANSFER_TO_ADDRESS_ZERO: felt252 = 'Transfer to 0';
+        const APPROVE_FROM_ADDRESS_ZERO: felt252 = 'Approve from 0';
+        const APPROVE_TO_ADDRESS_ZERO: felt252 = 'Approve to 0';
+    }
+
     // Note: The contract constructor is not part of the interface. Nor are internal functions part of the interface.
 
     // Constructor 
@@ -81,8 +99,8 @@ mod BWCERC20Token {
         recipient: ContractAddress
     ) {
         // The .is_zero() method here is used to determine whether the address type recipient is a 0 address, similar to recipient == address(0) in Solidity.
-        assert(!recipient.is_zero(), 'transfer to zero address');
-        assert(!_owner.is_zero(), 'owner cant be zero addr');
+        assert(!recipient.is_zero(), Errors::TRANSFER_ADDRESS_ZERO);
+        assert(!_owner.is_zero(), Errors::OWNER_ADDRESS);
         self.owner.write(_owner);
         self.name.write(_name);
         self.symbol.write(_symbol);
@@ -132,9 +150,9 @@ mod BWCERC20Token {
         fn mint(ref self: ContractState, recipient: ContractAddress, amount: u256) -> bool {
             let owner = self.owner.read();
             let caller = get_caller_address();
-            assert(owner == caller, 'caller not owner');
-            assert(!recipient.is_zero(), 'ERC20: Adddress zero');
-            assert(self.balances.read(recipient) >= amount, 'Insufficient fund');
+            assert(owner == caller, Errors::CALLER_NOT_OWNER);
+            assert(!recipient.is_zero(), Errors::ADDRESS_ZERO);
+            assert(self.balances.read(recipient) >= amount, Errors::INSUFFICIENT_FUND);
             self.balances.write(recipient, self.balances.read(recipient) + amount);
             self.total_supply.write(self.total_supply.read() - amount);
             // call tranfer 
@@ -157,8 +175,8 @@ mod BWCERC20Token {
             let caller = get_caller_address();
             let my_allowance = self.allowances.read((sender, caller));
 
-            assert(my_allowance > 0, 'You have no token approved');
-            assert(amount <= my_allowance, 'Amount Not Allowed');
+            assert(my_allowance > 0, Errors::APPROVED_TOKEN);
+            assert(amount <= my_allowance, Errors::AMOUNT_NOT_ALLOWED);
             // assert(my_allowance <= amount, 'Amount Not Allowed');
 
             self
@@ -195,9 +213,9 @@ mod BWCERC20Token {
         fn burn(ref self: ContractState, to: ContractAddress, amount: u256) -> bool {
             let owner = self.owner.read();
             let msg_sender = get_caller_address();
-            assert(owner == msg_sender, 'msg_sender not owner');
+            assert(owner == msg_sender, Errors::MSG_SENDER_NOT_OWNER);
 
-            assert(self.balances.read(to) >= amount, 'Insufficient fund');
+            assert(self.balances.read(to) >= amount, Errors::INSUFFICIENT_FUND);
 
             self.balances.write(msg_sender, self.balances.read(msg_sender) - amount);
 
@@ -219,9 +237,9 @@ mod BWCERC20Token {
         ) {
             let sender_balance = self.balance_of(sender);
 
-            assert(!sender.is_zero(), 'transfer from 0');
-            assert(!recipient.is_zero(), 'transfer to 0');
-            assert(sender_balance >= amount, 'Insufficient fund');
+            assert(!sender.is_zero(), Errors::TRANSFER_FROM_ADDRESS_ZERO);
+            assert(!recipient.is_zero(), Errors::TRANSFER_TO_ADDRESS_ZERO);
+            assert(sender_balance >= amount, Errors::INSUFFICIENT_FUND);
             self.balances.write(sender, self.balances.read(sender) - amount);
             self.balances.write(recipient, self.balances.read(recipient) + amount);
             true;
@@ -232,8 +250,8 @@ mod BWCERC20Token {
         fn approve_helper(
             ref self: ContractState, owner: ContractAddress, spender: ContractAddress, amount: u256
         ) {
-            assert(!owner.is_zero(), 'approve from 0');
-            assert(!spender.is_zero(), 'approve to 0');
+            assert(!owner.is_zero(), Errors::APPROVE_FROM_ADDRESS_ZERO);
+            assert(!spender.is_zero(), Errors::APPROVE_TO_ADDRESS_ZERO);
 
             self.allowances.write((owner, spender), amount);
 

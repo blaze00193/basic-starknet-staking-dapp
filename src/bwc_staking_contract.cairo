@@ -76,6 +76,14 @@ mod BWCStakingContract {
     }
 
 
+    /////////////////
+    //CUSTOM ERRORS
+    /////////////////
+    mod Errors {
+        const INSUFFICIENT_FUND: felt252 = 'Insufficient fund';
+        const INSUFFICIENT_BALANCE: felt252 = 'Insufficient balance';
+    }
+
     #[external(v0)]
     impl StakingTokenTraitImpl of super::StakingTokenTrait<ContractState> {
         fn stake_bwc_token(
@@ -86,8 +94,7 @@ mod BWCStakingContract {
             assert(
                 (IERC20Dispatcher { contract_address: BWCERC20TokenAddr }
                     .balance_of(caller) >= amount),
-                ''
-            //'BWCERC20Token:Insufficient Balance'
+                Errors::INSUFFICIENT_BALANCE
             );
             IERC20Dispatcher { contract_address: BWCERC20TokenAddr }
                 .transfer_from(caller, address_this, amount);
@@ -126,7 +133,7 @@ mod BWCStakingContract {
             let stake_time = self.staker.read(caller).timeStaked;
             let day_spent = get_block_timestamp() - stake_time;
             let mut stake: StakeDetail = self.staker.read(caller);
-            assert(amount <= stake_amount, 'Insufficient fund');
+            assert(amount <= stake_amount, Errors::INSUFFICIENT_FUND);
             if day_spent > minStakeTime {
                 let reward = self.calculateReward(caller);
                 stake.amount += reward;
