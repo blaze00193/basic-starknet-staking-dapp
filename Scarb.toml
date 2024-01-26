@@ -8,6 +8,7 @@ edition = "2023_10"
 [dependencies]
 snforge_std = { git = "https://github.com/foundry-rs/starknet-foundry", tag = "v0.14.0" }
 starknet = "2.4.1"
+openzeppelin = { git = "https://github.com/OpenZeppelin/cairo-contracts.git", tag = "v0.8.1" }
 
 [[target.starknet-contract]]
 casm = true
