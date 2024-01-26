@@ -20,19 +20,17 @@ trait IERC20<TContractState> {
 
     fn mint(ref self: TContractState, recipient: ContractAddress, amount: u256) -> bool;
 
-    fn burn(ref self: TContractState, to: ContractAddress, amount: u256) -> bool;
+    fn burn(ref self: TContractState, amount: u256) -> bool;
 }
 
 #[starknet::contract]
 mod BWCERC20Token {
     // importing necessary libraries
-    use starknet::ContractAddress;
-    use starknet::get_caller_address;
-    use starknet::contract_address_const; //similar to address(0) in Solidity
+    use starknet::{ContractAddress, get_caller_address, contract_address_const};
     use core::zeroable::Zeroable;
     use super::IERC20;
 
-    //Stroge Variables
+    //Storage Variables
     #[storage]
     struct Storage {
         name: felt252,
@@ -45,6 +43,7 @@ mod BWCERC20Token {
             (ContractAddress, ContractAddress), u256
         >, //similar to mapping(address => mapping(address => uint256))
     }
+
     //  Event
     #[event]
     #[derive(Drop, starknet::Event)]
@@ -89,30 +88,33 @@ mod BWCERC20Token {
 
     // Constructor 
     #[constructor]
-    fn constructor(
-        ref self: ContractState,
-        _owner: ContractAddress,
-        _name: felt252,
-        _symbol: felt252,
-        _decimal: u8,
-        _initial_supply: u256,
-        recipient: ContractAddress
-    ) {
+    fn constructor(ref self: ContractState, //_owner: ContractAddress,
+     // _name: felt252,
+    // _symbol: felt252,
+    // _decimal: u8,
+    // _initial_supply: u256,
+    recipient: ContractAddress) {
         // The .is_zero() method here is used to determine whether the address type recipient is a 0 address, similar to recipient == address(0) in Solidity.
         assert(!recipient.is_zero(), Errors::TRANSFER_ADDRESS_ZERO);
-        assert(!_owner.is_zero(), Errors::OWNER_ADDRESS);
-        self.owner.write(_owner);
-        self.name.write(_name);
-        self.symbol.write(_symbol);
-        self.decimals.write(_decimal);
-        self.total_supply.write(_initial_supply);
-        self.balances.write(recipient, _initial_supply);
+        // assert(!_owner.is_zero(), Errors::OWNER_ADDRESS);
+        //self.owner.write(_owner);
+        // self.name.write(_name);
+        // self.symbol.write(_symbol);
+        // self.decimals.write(_decimal);
+        // self.total_supply.write(_initial_supply);
+        // self.balances.write(recipient, _initial_supply);
+        self.owner.write(recipient);
+
+        self.name.write('BlockheaderToken');
+        self.symbol.write('BWC');
+        self.decimals.write(18);
+        self.total_supply.write(1000000);
+        self.balances.write(recipient, 1000000);
 
         self
             .emit(
-                Transfer {
-                    //Here, `contract_address_const::<0>()` is similar to address(0) in Solidity
-                    from: contract_address_const::<0>(), to: recipient, value: _initial_supply
+                Transfer { //Here, `contract_address_const::<0>()` is similar to address(0) in Solidity
+                    from: contract_address_const::<0>(), to: recipient, value: 1000000
                 }
             );
     }
@@ -152,14 +154,14 @@ mod BWCERC20Token {
             let caller = get_caller_address();
             assert(owner == caller, Errors::CALLER_NOT_OWNER);
             assert(!recipient.is_zero(), Errors::ADDRESS_ZERO);
-            assert(self.balances.read(recipient) >= amount, Errors::INSUFFICIENT_FUND);
+            assert(self.balances.read(self.owner.read()) >= amount, Errors::INSUFFICIENT_FUND);
+            self.balances.write(self.owner.read(), self.balances.read(owner) - amount);
             self.balances.write(recipient, self.balances.read(recipient) + amount);
-            self.total_supply.write(self.total_supply.read() - amount);
-            // call tranfer 
-            // Transfer(Zeroable::zero(), recipient, amount);
+            self.total_supply.write(self.total_supply.read() - amount); // Updated the total supply
 
             true
         }
+
 
         fn transfer(ref self: ContractState, recipient: ContractAddress, amount: u256) {
             let caller = get_caller_address();
@@ -210,23 +212,26 @@ mod BWCERC20Token {
                 );
         }
 
-        fn burn(ref self: ContractState, to: ContractAddress, amount: u256) -> bool {
+
+        fn burn(ref self: ContractState, amount: u256) -> bool {
             let owner = self.owner.read();
-            let msg_sender = get_caller_address();
-            assert(owner == msg_sender, Errors::MSG_SENDER_NOT_OWNER);
+            let caller = get_caller_address();
 
-            assert(self.balances.read(to) >= amount, Errors::INSUFFICIENT_FUND);
+            // Check if the caller is the owner.
+            assert(owner == caller, Errors::CALLER_NOT_OWNER);
 
-            self.balances.write(msg_sender, self.balances.read(msg_sender) - amount);
+            // Check if the balance of the owner is greater than or equal to the amount to burn.
+            assert(self.balances.read(owner) >= amount, Errors::INSUFFICIENT_FUND);
 
-            // call transfer
+            // Subtract the amount from the owner's balance.
+            self.balances.write(owner, self.balances.read(owner) - amount);
 
-            // Transfer(Zeroable::zero(), to, amount);
+            // Update the total supply.
+            self.total_supply.write(self.total_supply.read() - amount);
 
             true
         }
     }
-
     #[generate_trait]
     impl HelperImpl of HelperTrait {
         fn transfer_helper(
@@ -280,3 +285,6 @@ mod BWCERC20Token {
         }
     }
 }
+
+
+
