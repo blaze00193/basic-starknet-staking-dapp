@@ -20,19 +20,17 @@ trait IERC20<TContractState> {
 
     fn mint(ref self: TContractState, recipient: ContractAddress, amount: u256) -> bool;
 
-    fn burn(ref self: TContractState, to: ContractAddress, amount: u256) -> bool;
+    fn burn(ref self: TContractState, amount: u256) -> bool;
 }
 
 #[starknet::contract]
 mod BWCERC20Token {
     // importing necessary libraries
-    use starknet::ContractAddress;
-    use starknet::get_caller_address;
-    use starknet::contract_address_const; //similar to address(0) in Solidity
+    use starknet::{ContractAddress, get_caller_address, contract_address_const};
     use core::zeroable::Zeroable;
     use super::IERC20;
 
-    //Stroge Variables
+    //Storage Variables
     #[storage]
     struct Storage {
         name: felt252,
@@ -45,6 +43,7 @@ mod BWCERC20Token {
             (ContractAddress, ContractAddress), u256
         >, //similar to mapping(address => mapping(address => uint256))
     }
+
     //  Event
     #[event]
     #[derive(Drop, starknet::Event)]
@@ -89,30 +88,33 @@ mod BWCERC20Token {
 
     // Constructor 
     #[constructor]
-    fn constructor(
-        ref self: ContractState,
-        _owner: ContractAddress,
-        _name: felt252,
-        _symbol: felt252,
-        _decimal: u8,
-        _initial_supply: u256,
-        recipient: ContractAddress
-    ) {
+    fn constructor(ref self: ContractState, //_owner: ContractAddress,
+     // _name: felt252,
+    // _symbol: felt252,
+    // _decimal: u8,
+    // _initial_supply: u256,
+    recipient: ContractAddress) {
         // The .is_zero() method here is used to determine whether the address type recipient is a 0 address, similar to recipient == address(0) in Solidity.
         assert(!recipient.is_zero(), Errors::TRANSFER_ADDRESS_ZERO);
-        assert(!_owner.is_zero(), Errors::OWNER_ADDRESS);
-        self.owner.write(_owner);
-        self.name.write(_name);
-        self.symbol.write(_symbol);
-        self.decimals.write(_decimal);
-        self.total_supply.write(_initial_supply);
-        self.balances.write(recipient, _initial_supply);
+        // assert(!_owner.is_zero(), Errors::OWNER_ADDRESS);
+        //self.owner.write(_owner);
+        // self.name.write(_name);
+        // self.symbol.write(_symbol);
+        // self.decimals.write(_decimal);
+        // self.total_supply.write(_initial_supply);
+        // self.balances.write(recipient, _initial_supply);
+        self.owner.write(recipient);
+
+        self.name.write('BlockheaderToken');
+        self.symbol.write('BWC');
+        self.decimals.write(18);
+        self.total_supply.write(1000000);
+        self.balances.write(recipient, 1000000);
 
         self
             .emit(
-                Transfer {
-                    //Here, `contract_address_const::<0>()` is similar to address(0) in Solidity
-                    from: contract_address_const::<0>(), to: recipient, value: _initial_supply
+                Transfer { //Here, `contract_address_const::<0>()` is similar to address(0) in Solidity
+                    from: contract_address_const::<0>(), to: recipient, value: 1000000
                 }
             );
     }
@@ -152,14 +154,14 @@ mod BWCERC20Token {
             let caller = get_caller_address();
             assert(owner == caller, Errors::CALLER_NOT_OWNER);
             assert(!recipient.is_zero(), Errors::ADDRESS_ZERO);
-            assert(self.balances.read(recipient) >= amount, Errors::INSUFFICIENT_FUND);
+            assert(self.balances.read(self.owner.read()) >= amount, Errors::INSUFFICIENT_FUND);
+            self.balances.write(self.owner.read(), self.balances.read(owner) - amount);
             self.balances.write(recipient, self.balances.read(recipient) + amount);
-            self.total_supply.write(self.total_supply.read() - amount);
-            // call tranfer 
-            // Transfer(Zeroable::zero(), recipient, amount);
+            self.total_supply.write(self.total_supply.read() - amount); // Updated the total supply
 
             true
         }
+
 
         fn transfer(ref self: ContractState, recipient: ContractAddress, amount: u256) {
             let caller = get_caller_address();
@@ -210,23 +212,26 @@ mod BWCERC20Token {
                 );
         }
 
-        fn burn(ref self: ContractState, to: ContractAddress, amount: u256) -> bool {
+
+        fn burn(ref self: ContractState, amount: u256) -> bool {
             let owner = self.owner.read();
-            let msg_sender = get_caller_address();
-            assert(owner == msg_sender, Errors::MSG_SENDER_NOT_OWNER);
+            let caller = get_caller_address();
 
-            assert(self.balances.read(to) >= amount, Errors::INSUFFICIENT_FUND);
+            // Check if the caller is the owner.
+            assert(owner == caller, Errors::CALLER_NOT_OWNER);
 
-            self.balances.write(msg_sender, self.balances.read(msg_sender) - amount);
+            // Check if the balance of the owner is greater than or equal to the amount to burn.
+            assert(self.balances.read(owner) >= amount, Errors::INSUFFICIENT_FUND);
 
-            // call transfer
+            // Subtract the amount from the owner's balance.
+            self.balances.write(owner, self.balances.read(owner) - amount);
 
-            // Transfer(Zeroable::zero(), to, amount);
+            // Update the total supply.
+            self.total_supply.write(self.total_supply.read() - amount);
 
             true
         }
     }
-
     #[generate_trait]
     impl HelperImpl of HelperTrait {
         fn transfer_helper(
@@ -280,3 +285,225 @@ mod BWCERC20Token {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use core::serde::Serde;
+    use super::{IERC20, BWCERC20Token, IERC20Dispatcher, IERC20DispatcherTrait};
+    use starknet::ContractAddress;
+    use starknet::contract_address::contract_address_const;
+    use core::ArrayTrait;
+    use snforge_std::{declare, ContractClassTrait, fs::{FileTrait, read_txt}};
+    use snforge_std::{start_prank, stop_prank, CheatTarget};
+    use snforge_std::PrintTrait;
+    use core::{Into, TryInto};
+
+    // helper function
+    fn deploy_contract() -> ContractAddress {
+        let erc20_contract_class = declare('BWCERC20Token');
+        let file = FileTrait::new('data/constructor_args.txt');
+        let constructor_args = read_txt(@file);
+
+        let contract_address = erc20_contract_class.deploy(@constructor_args).unwrap();
+        contract_address
+    }
+
+    #[test]
+    fn test_constructor() {
+        let contract_address = deploy_contract();
+        let dispatcher = IERC20Dispatcher { contract_address };
+        let name = dispatcher.get_name();
+        assert(name == 'BlockheaderToken', Errors::INCORRECT_NAME);
+    }
+
+    #[test]
+    fn test_name() {
+        let contract_address = deploy_contract();
+        let dispatcher = IERC20Dispatcher { contract_address };
+        let name = dispatcher.get_name();
+        assert(name == 'BlockheaderToken', Errors::INCORRECT_NAME);
+    }
+
+    #[test]
+    fn test_symbol_is_correct() {
+        let contract_address = deploy_contract();
+        let dispatcher = IERC20Dispatcher { contract_address };
+        let symbol = dispatcher.get_symbol();
+        assert(symbol == 'BWC', Errors::INCORRECT_SYMBOLS);
+    }
+
+    #[test]
+    fn test_decimal_is_correct() {
+        let contract_address = deploy_contract();
+        let dispatcher = IERC20Dispatcher { contract_address };
+        let decimal = dispatcher.get_decimals();
+        assert(decimal == 18, Errors::INVALID_DECIMALS);
+    }
+
+    #[test]
+    fn test_total_supply() {
+        let address = deploy_contract();
+        let dispatcher = IERC20Dispatcher { contract_address: address };
+        let total_supply = dispatcher.get_total_supply();
+        assert(total_supply == 1000000, Errors::UNMATCHED_SUPPLY);
+    }
+
+    #[test]
+    fn test_address_balance() {
+        let contract_address = deploy_contract();
+        let dispatcher = IERC20Dispatcher { contract_address };
+        let balance = dispatcher.get_total_supply();
+        let admin_balance = dispatcher.balance_of(Account::admin());
+        assert(admin_balance == balance, Errors::INVALID_BALANCE);
+
+        start_prank(CheatTarget::One(contract_address), Account::admin());
+        dispatcher.transfer(Account::user1(), 10);
+        let new_admin_balance = dispatcher.balance_of(Account::admin());
+        new_admin_balance.print();
+        assert(new_admin_balance == balance - 10, Errors::INVALID_BALANCE);
+        stop_prank(CheatTarget::One(contract_address));
+
+        let user1_balance = dispatcher.balance_of(Account::user1());
+        assert(user1_balance == 10, Errors::INVALID_BALANCE);
+    }
+
+    #[test]
+    fn test_allowance() {
+        let contract_address = deploy_contract();
+        let dispatcher = IERC20Dispatcher { contract_address };
+
+        start_prank(CheatTarget::One(contract_address), Account::admin());
+        dispatcher.approve(contract_address, 10);
+        assert(
+            dispatcher.allowance(Account::admin(), contract_address) == 10, Errors::INVALID_BALANCE
+        );
+        stop_prank(CheatTarget::One(contract_address));
+    }
+
+    #[test]
+    fn test_transfer() {
+        let contract_address = deploy_contract();
+        let dispatcher = IERC20Dispatcher { contract_address };
+        start_prank(CheatTarget::One(contract_address), Account::admin());
+        dispatcher.transfer(Account::user1(), 10);
+        let user1_balance = dispatcher.balance_of(Account::user1());
+        assert(user1_balance == 10, Errors::INVALID_BALANCE);
+
+        stop_prank(CheatTarget::One(contract_address));
+    }
+
+    #[test]
+    fn test_transfer_from() {
+        let contract_address = deploy_contract();
+        let dispatcher = IERC20Dispatcher { contract_address };
+        let user1 = Account::user1();
+        start_prank(CheatTarget::One(contract_address), Account::admin());
+        dispatcher.approve(user1, 10);
+        assert(dispatcher.allowance(Account::admin(), user1) == 10, Errors::NOT_ALLOWED);
+        stop_prank(CheatTarget::One(contract_address));
+
+        start_prank(CheatTarget::One(contract_address), user1);
+        dispatcher.transfer_from(Account::admin(), Account::user2(), 5);
+        assert(dispatcher.balance_of(Account::user2()) == 5, Errors::INVALID_BALANCE);
+        // dispatcher.transfer_from(Account::admin(), user1, 15);
+        // assert(dispatcher.balance_of(user1) == 5, Errors::INVALID_BALANCE);
+        stop_prank(CheatTarget::One(contract_address));
+    }
+
+    #[test]
+    #[should_panic(expected: ('You have no token approved',))]
+    fn test_transfer_from_failed_when_not_approved() {
+        let contract_address = deploy_contract();
+        let dispatcher = IERC20Dispatcher { contract_address };
+        start_prank(CheatTarget::One(contract_address), Account::user1());
+        dispatcher.transfer_from(Account::admin(), Account::user2(), 5);
+    }
+
+    #[test]
+    fn test_mint() {
+        let contract_address = deploy_contract();
+        let dispatcher = IERC20Dispatcher { contract_address };
+
+        let admin = Account::admin();
+        let user1 = Account::user1();
+        let mint_amount: u256 = 10;
+
+        // Ensure the user1's balance before the mint operation
+        let initial_user1_balance = dispatcher.balance_of(Account::user1());
+        let initial_total_supply = dispatcher.get_total_supply();
+
+        start_prank(CheatTarget::One(contract_address), Account::admin());
+        dispatcher.mint(Account::user1(), mint_amount);
+
+        // Check user1's balance after the mint operation
+        assert(
+            dispatcher.balance_of(Account::user1()) == initial_user1_balance + mint_amount,
+            Errors::INVALID_BALANCE
+        );
+
+        // Check the total supply after the mint operation
+        assert(
+            dispatcher.get_total_supply() == initial_total_supply - mint_amount,
+            Errors::UNMATCHED_SUPPLY
+        );
+
+        stop_prank(CheatTarget::One(contract_address));
+    }
+
+    #[test]
+    fn test_burn() {
+        let contract_address = deploy_contract();
+        let dispatcher = IERC20Dispatcher { contract_address };
+
+        let owner = Account::admin();
+        let burn_amount: u256 = 10;
+
+        // Ensure the owner's balance before the burn operation
+        let initial_owner_balance = dispatcher.balance_of(owner);
+        let initial_total_supply = dispatcher.get_total_supply();
+
+        start_prank(CheatTarget::One(contract_address), owner);
+        dispatcher.burn(burn_amount);
+
+        // Check owner's balance after the burn operation
+        assert(
+            dispatcher.balance_of(owner) == initial_owner_balance - burn_amount,
+            Errors::INVALID_BALANCE
+        );
+
+        // Check the total supply after the burn operation
+        assert(
+            dispatcher.get_total_supply() == initial_total_supply - burn_amount,
+            Errors::UNMATCHED_SUPPLY
+        );
+        stop_prank(CheatTarget::One(contract_address));
+    }
+
+
+    mod Errors {
+        const INVALID_DECIMALS: felt252 = 'Invalid decimals';
+        const UNMATCHED_SUPPLY: felt252 = 'Unmatched supply';
+        const INVALID_BALANCE: felt252 = 'Invalid balance';
+        const NOT_ALLOWED: felt252 = 'Not allowed';
+        const INCORRECT_NAME: felt252 = 'Name is not correct';
+        const INCORRECT_SYMBOLS: felt252 = 'Symbol is not correct';
+    }
+
+    mod Account {
+        use core::option::OptionTrait;
+        use starknet::ContractAddress;
+        use core::TryInto;
+
+        fn user1() -> ContractAddress {
+            'joy'.try_into().unwrap()
+        }
+
+        fn user2() -> ContractAddress {
+            'caleb'.try_into().unwrap()
+        }
+        fn admin() -> ContractAddress {
+            'admin'.try_into().unwrap()
+        }
+    }
+}
+
