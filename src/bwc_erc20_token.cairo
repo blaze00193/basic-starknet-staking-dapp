@@ -486,7 +486,7 @@ mod test {
         const INVALID_BALANCE: felt252 = 'Invalid balance';
         const NOT_ALLOWED: felt252 = 'Not allowed';
         const INCORRECT_NAME: felt252 = 'Name is not correct';
-        const INCORRECT_SYMBOLS: felt252 = 'Symbols is not correct';
+        const INCORRECT_SYMBOLS: felt252 = 'Symbol is not correct';
     }
 
     mod Account {
