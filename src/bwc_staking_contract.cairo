@@ -9,10 +9,8 @@ trait IStake<TContractState> {
         receipt_token: ContractAddress
     ) -> bool;
 
-    fn withdraw(
-        ref self: TContractState, amount: u256, BWCERC20TokenAddr: ContractAddress
-    ) -> bool;
-    fn getUserBalance(self: @TContractState) -> u256;
+    fn withdraw(ref self: TContractState, amount: u256, BWCERC20TokenAddr: ContractAddress) -> bool;
+    fn get_user_stake_balance(self: @TContractState) -> u256;
 }
 
 #[starknet::contract]
@@ -133,11 +131,11 @@ mod BWCStakingContract {
             IERC20Dispatcher { contract_address: BWCERC20TokenAddr }
                 .transfer_from(caller, address_this, amount);
 
-
             self.emit(Event::TokenStaked(TokenStaked { staker: caller, amount, time: stake_time }));
             true
         }
 
+        // WIP
         fn withdraw(
             ref self: ContractState, amount: u256, BWCERC20TokenAddr: ContractAddress
         ) -> bool {
@@ -171,14 +169,11 @@ mod BWCStakingContract {
             true
         }
 
-        fn getUserBalance(self: @ContractState) -> u256 {
+        fn get_user_stake_balance(self: @ContractState) -> u256 {
             let caller: ContractAddress = get_caller_address();
             return self.staker.read(caller).amount;
         }
-    // getStakeDetailsByAddress
-    // fn getStakeDetailsByAddress(self: @ContractState, account:ContractAddress) ->super::StakeDetail{
-    //     return self.staker.read(account);
-    // }
+
     }
 
 
