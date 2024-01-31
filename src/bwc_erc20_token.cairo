@@ -155,13 +155,20 @@ mod BWCERC20Token {
             assert(owner == caller, Errors::CALLER_NOT_OWNER);
             assert(!recipient.is_zero(), Errors::ADDRESS_ZERO);
             assert(self.balances.read(self.owner.read()) >= amount, Errors::INSUFFICIENT_FUND);
-            self.balances.write(self.owner.read(), self.balances.read(owner) - amount);
-            self.balances.write(recipient, self.balances.read(recipient) + amount);
+            self
+                .balances
+                .write(
+                    self.owner.read(), self.balances.read(owner) - amount
+                ); // subtract amount from caller's balance
+            self
+                .balances
+                .write(
+                    recipient, self.balances.read(recipient) + amount
+                ); // add amount to recipient's balance
             self.total_supply.write(self.total_supply.read() - amount); // Updated the total supply
 
             true
         }
-
 
         fn transfer(ref self: ContractState, recipient: ContractAddress, amount: u256) {
             let caller = get_caller_address();

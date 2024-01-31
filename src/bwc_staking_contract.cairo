@@ -8,7 +8,6 @@ trait IStake<TContractState> {
         BWCERC20TokenAddr: ContractAddress,
         receipt_token: ContractAddress
     ) -> bool;
-
     fn withdraw(ref self: TContractState, amount: u256, BWCERC20TokenAddr: ContractAddress) -> bool;
     fn get_user_stake_balance(self: @TContractState) -> u256;
 }
@@ -22,7 +21,9 @@ mod BWCStakingContract {
     use core::zeroable::Zeroable;
 
     use basic_staking_dapp::bwc_erc20_token::{IERC20Dispatcher, IERC20DispatcherTrait};
-    use basic_staking_dapp::receipt_token::{IReceiptTokenDispatcher, IReceiptTokenDispatcherTrait};
+    use basic_staking_dapp::receipt_token::{
+        IBWCReceiptTokenDispatcher, IBWCReceiptTokenDispatcherTrait
+    };
     //use integer::Into;
     use core::serde::Serde;
     use core::integer::u64;
@@ -51,7 +52,8 @@ mod BWCStakingContract {
     // CONSTANTS
     //////////////////
 
-    const minStakeTime: u64 = 259200_u64; // Minimun time staked token can be withdrawn from pool. Equivalent to 1 hour
+    const min_stake_time: u64 =
+        3600_u64; // Minimun time staked token can be withdrawn from pool. Equivalent to 1 hour
     // const bwc_stake_token: ContractAddress = '';
 
     /////////////////
@@ -94,12 +96,12 @@ mod BWCStakingContract {
         // transfer receipt tokens to staking contract
         let address_this: ContractAddress = get_contract_address();
         let caller: ContractAddress = get_caller_address();
-        IReceiptTokenDispatcher { contract_address: receipt_token }._transfer(address_this, amount);
+        IBWCReceiptTokenDispatcher { contract_address: receipt_token }
+            .transfer_token(address_this, amount);
     }
 
     #[external(v0)]
     impl IStakeImpl of super::IStake<ContractState> {
-
         // Function allows caller to stake their token
         // @amount: Amount of token to stake
         // @BWCERC20TokenAddr: Contract address of token to stake
@@ -126,11 +128,11 @@ mod BWCStakingContract {
             let address_this: ContractAddress = get_contract_address();
 
             // transfer receipt token to depositor
-            IReceiptTokenDispatcher { contract_address: receipt_token }._transfer(caller, amount);
+            IBWCReceiptTokenDispatcher { contract_address: receipt_token }.transfer_token(caller, amount);
 
             // approve stake contract to spend receipt token
-            IReceiptTokenDispatcher { contract_address: address_this }
-                ._approve(address_this, amount);
+            IBWCReceiptTokenDispatcher { contract_address: address_this }
+                .approve_token(address_this, amount);
 
             // approve stake contract to spend stake token of depositor
             IERC20Dispatcher { contract_address: BWCERC20TokenAddr }.approve(address_this, amount);
@@ -169,7 +171,7 @@ mod BWCStakingContract {
             assert(amount <= stake_amount, Errors::INSUFFICIENT_FUND);
 
             // 👀👀👀
-            if day_spent > minStakeTime {
+            if day_spent > min_stake_time {
                 let reward = self.calculateReward(caller);
                 stake.amount += reward;
                 stake.amount -= amount;
@@ -198,7 +200,6 @@ mod BWCStakingContract {
             let caller: ContractAddress = get_caller_address();
             return self.staker.read(caller).amount;
         }
-
     }
 
 
@@ -214,7 +215,7 @@ mod BWCStakingContract {
             }
             let reward_per_month = (stake_amount * 10);
             let time = get_block_timestamp() - stake_time;
-            let reward = (reward_per_month * time.into() * 1000) / minStakeTime.into();
+            let reward = (reward_per_month * time.into() * 1000) / min_stake_time.into();
             return reward;
         }
     }
