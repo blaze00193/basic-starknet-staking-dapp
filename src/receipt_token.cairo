@@ -3,17 +3,20 @@ use starknet::{ContractAddress, get_caller_address, get_contract_address, get_bl
 
 #[starknet::interface]
 trait IBWCReceiptToken<T> {
-    fn mint_token(ref self: T, recipient: ContractAddress, amount: u256) -> bool;
-    fn burn_token(ref self: T, value: u256) -> bool;
+    fn mint(ref self: T, recipient: ContractAddress, amount: u256) -> bool;
+    fn burn(ref self: T, value: u256) -> bool;
     fn transfer_token(ref self: T, to: ContractAddress, amount: u256) -> bool;
     fn transfer_token_from(
         ref self: T, from: ContractAddress, spender: ContractAddress, amount: u256
     ) -> bool;
     fn approve_token(ref self: T, spender: ContractAddress, amount: u256) -> bool;
+    fn balance_of_token(self: @T, account: ContractAddress) -> u256;
 }
 
 #[starknet::contract]
 mod BWCReceiptToken {
+    use core::traits::Into;
+    use core::traits::TryInto;
     use core::zeroable::Zeroable;
     use starknet::{ContractAddress, get_caller_address};
     use super::IBWCReceiptToken;
@@ -95,7 +98,7 @@ mod BWCReceiptToken {
 
     #[external(v0)]
     impl IBWCReceiptTokenImpl of IBWCReceiptToken<ContractState> {
-        fn mint_token(ref self: ContractState, recipient: ContractAddress, amount: u256) -> bool {
+        fn mint(ref self: ContractState, recipient: ContractAddress, amount: u256) -> bool {
             assert(amount != 0, Errors::ZERO_AMOUNT); // Cannot mint 0 tokens
             assert(!recipient.is_zero(), Errors::ADDRESS_ZERO); // Cannot mint to address 0
 
@@ -149,17 +152,21 @@ mod BWCReceiptToken {
             true
         }
 
-        fn burn_token(ref self: ContractState, value: u256) -> bool {
+        fn burn(ref self: ContractState, value: u256) -> bool {
             let caller = get_caller_address();
 
             assert(value != 0, Errors::ZERO_AMOUNT); // Burn amount cannnot be 0
             assert(
-                self.erc20.balance_of(caller) >= value, ''
+                self.erc20.balance_of(caller) >= value, Errors::AMOUNT_NOT_ALLOWED
             ); // Caller must have enough token to burn
 
             self.erc20._burn(caller, value); // Burn 'value' from caller account
 
             true
+        }
+
+        fn balance_of_token(self: @ContractState, account: ContractAddress) -> u256 {
+            self.erc20.balance_of(account)
         }
     }
 }
