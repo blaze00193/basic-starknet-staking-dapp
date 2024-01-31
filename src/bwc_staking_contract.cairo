@@ -21,9 +21,7 @@ mod BWCStakingContract {
     use starknet::{ContractAddress, get_caller_address, get_contract_address, get_block_timestamp};
     use core::zeroable::Zeroable;
 
-
-    use basic_staking_dapp::bwc_erc20_token::IERC20Dispatcher;
-    use basic_staking_dapp::bwc_erc20_token::IERC20DispatcherTrait;
+    use basic_staking_dapp::bwc_erc20_token::{IERC20Dispatcher, IERC20DispatcherTrait};
     use basic_staking_dapp::receipt_token::{IReceiptTokenDispatcher, IReceiptTokenDispatcherTrait};
     //use integer::Into;
     use core::serde::Serde;
@@ -50,9 +48,10 @@ mod BWCStakingContract {
 
 
     //////////////////
-    // CONSTANT
+    // CONSTANTS
     //////////////////
-    const minStakeTime: u64 = 259200_u64;
+
+    const minStakeTime: u64 = 259200_u64; // Minimun time staked token can be withdrawn from pool. Equivalent to 1 hour
     // const bwc_stake_token: ContractAddress = '';
 
     /////////////////
@@ -97,8 +96,14 @@ mod BWCStakingContract {
         let caller: ContractAddress = get_caller_address();
         IReceiptTokenDispatcher { contract_address: receipt_token }._transfer(address_this, amount);
     }
+
     #[external(v0)]
     impl IStakeImpl of super::IStake<ContractState> {
+
+        // Function allows caller to stake their token
+        // @amount: Amount of token to stake
+        // @BWCERC20TokenAddr: Contract address of token to stake
+        // @receipt_token: Contract address of receipt token
         fn stake(
             ref self: ContractState,
             amount: u256,
@@ -113,11 +118,13 @@ mod BWCStakingContract {
             let mut stake: StakeDetail = self.staker.read(caller);
             let stake_time: u64 = get_block_timestamp();
             stake.timeStaked = stake_time;
-            stake.amount += amount;
+            stake.amount += amount; // Increase total amount staked
             stake.status = true;
             // todo - validate bwctokenaddr
 
+            // get address of this contract
             let address_this: ContractAddress = get_contract_address();
+
             // transfer receipt token to depositor
             IReceiptTokenDispatcher { contract_address: receipt_token }._transfer(caller, amount);
 
@@ -125,9 +132,10 @@ mod BWCStakingContract {
             IReceiptTokenDispatcher { contract_address: address_this }
                 ._approve(address_this, amount);
 
-            // approve stake contract to spend stake token
+            // approve stake contract to spend stake token of depositor
             IERC20Dispatcher { contract_address: BWCERC20TokenAddr }.approve(address_this, amount);
 
+            // transfer stake token from depositor to this contract
             IERC20Dispatcher { contract_address: BWCERC20TokenAddr }
                 .transfer_from(caller, address_this, amount);
 
@@ -136,15 +144,31 @@ mod BWCStakingContract {
         }
 
         // WIP
+        // Function allows caller to withdraw their staked token
+        // @amount: Amount of token to withdraw
+        // @BWCERC20TokenAddr: Contract address of token to withdraw
         fn withdraw(
             ref self: ContractState, amount: u256, BWCERC20TokenAddr: ContractAddress
         ) -> bool {
+            // get address of caller
             let caller = get_caller_address();
-            let stake_amount = self.staker.read(caller).amount;
-            let stake_time = self.staker.read(caller).timeStaked;
-            let day_spent = get_block_timestamp() - stake_time;
+
+            // 
             let mut stake: StakeDetail = self.staker.read(caller);
+
+            // get amount caller has staked
+            let stake_amount = stake.amount;
+
+            // get last timestamp caller staked
+            let stake_time = stake.timeStaked;
+
+            // get how many days has passed since caller last staked
+            let day_spent = get_block_timestamp() - stake_time;
+
+            // assert that caller cannot withdraw more than staked amount
             assert(amount <= stake_amount, Errors::INSUFFICIENT_FUND);
+
+            // 👀👀👀
             if day_spent > minStakeTime {
                 let reward = self.calculateReward(caller);
                 stake.amount += reward;
@@ -154,6 +178,7 @@ mod BWCStakingContract {
                 stake.amount = stake.amount - amount;
                 stake.timeStaked = get_block_timestamp();
             }
+
             IERC20Dispatcher { contract_address: BWCERC20TokenAddr }.transfer(caller, amount);
             stake.timeStaked = get_block_timestamp();
 
