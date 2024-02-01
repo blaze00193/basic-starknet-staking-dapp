@@ -11,6 +11,7 @@ trait IBWCERC20Token<T> {
     ) -> bool;
     fn approve_token(ref self: T, spender: ContractAddress, amount: u256) -> bool;
     fn balance_of_token(self: @T, account: ContractAddress) -> u256;
+    fn allowance_amount(self: @T, spender: ContractAddress, owner: ContractAddress) -> u256;
 }
 
 #[starknet::contract]
@@ -165,6 +166,12 @@ mod BWCERC20Token {
 
         fn balance_of_token(self: @ContractState, account: ContractAddress) -> u256 {
             self.erc20.balance_of(account)
+        }
+
+        fn allowance_amount(
+            self: @ContractState, spender: ContractAddress, owner: ContractAddress
+        ) -> u256 {
+            self.erc20.allowance(spender, owner)
         }
     }
 }
