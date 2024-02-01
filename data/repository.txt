@@ -1,0 +1,3 @@
+BWCRewardToken: 
+    - Class Hash: 0x6514a38014e4c7d3e0f245c706c611d18f993e28d025a8969c51a82c3c7bfa2
+    - Contract Address: 0x724ca4913ef01fc2ac5ab846ffd1a026ae05f55a7507728fc5b04db32231193

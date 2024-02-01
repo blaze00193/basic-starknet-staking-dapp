@@ -1,43 +1,55 @@
 // SPDX-License-Identifier: MIT
 use starknet::{ContractAddress, get_caller_address, get_contract_address, get_block_timestamp};
+
 #[starknet::interface]
-trait IReceiptToken<T> {
+trait IBWCReceiptToken<T> {
     fn mint(ref self: T, recipient: ContractAddress, amount: u256) -> bool;
     fn burn(ref self: T, value: u256) -> bool;
-    fn _transfer(ref self: T, to: ContractAddress, amount: u256) -> bool;
-    fn _transfer_from(
+    fn transfer_token(ref self: T, to: ContractAddress, amount: u256) -> bool;
+    fn transfer_token_from(
         ref self: T, from: ContractAddress, spender: ContractAddress, amount: u256
     ) -> bool;
-    fn _approve(ref self: T, spender: ContractAddress, amount: u256) -> bool;
+    fn approve_token(ref self: T, spender: ContractAddress, amount: u256) -> bool;
+    fn balance_of_token(self: @T, account: ContractAddress) -> u256;
+    fn allowance_amount(self: @T, spender: ContractAddress, owner: ContractAddress) -> u256;
 }
+
 #[starknet::contract]
-mod ReceiptToken {
+mod BWCReceiptToken {
+    use core::traits::Into;
+    use core::traits::TryInto;
+    use core::zeroable::Zeroable;
+    use starknet::{ContractAddress, get_caller_address};
+    use super::IBWCReceiptToken;
+
     use openzeppelin::token::erc20::interface::IERC20;
     use openzeppelin::token::erc20::erc20::ERC20Component::InternalTrait;
-    use super::IReceiptToken;
-    use core::zeroable::Zeroable;
-
-
     use openzeppelin::token::erc20::ERC20Component;
     use openzeppelin::access::ownable::OwnableComponent;
-    use starknet::{ContractAddress, get_caller_address};
 
+    // Components import
     component!(path: ERC20Component, storage: erc20, event: ERC20Event);
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
 
+    // External implementations from components
+
     #[abi(embed_v0)]
     impl ERC20MetadataImpl = ERC20Component::ERC20MetadataImpl<ContractState>;
+
     #[abi(embed_v0)]
     impl ERC20Impl = ERC20Component::ERC20Impl<ContractState>;
-    #[abi(embed_v0)]
-    impl ERC20CamelOnlyImpl = ERC20Component::ERC20CamelOnlyImpl<ContractState>;
+
     #[abi(embed_v0)]
     impl OwnableImpl = OwnableComponent::OwnableImpl<ContractState>;
+
     #[abi(embed_v0)]
     impl OwnableCamelOnlyImpl =
         OwnableComponent::OwnableCamelOnlyImpl<ContractState>;
 
+    // Internal implelemntations from components
+
     impl ERC20InternalImpl = ERC20Component::InternalImpl<ContractState>;
+
     impl OwnableInternalImpl = OwnableComponent::InternalImpl<ContractState>;
 
     #[storage]
@@ -76,51 +88,92 @@ mod ReceiptToken {
         const APPROVE_FROM_ADDRESS_ZERO: felt252 = 'Approve from 0';
         const APPROVE_TO_ADDRESS_ZERO: felt252 = 'Approve to 0';
     }
+
     #[constructor]
     fn constructor(ref self: ContractState, recipient: ContractAddress, owner: ContractAddress) {
-        self.erc20.initializer('ReceiptBWC', 'RBC');
+        self.erc20.initializer('BWCReceiptToken', 'cBWCRT');
         self.ownable.initializer(owner);
 
-        self.erc20._mint(recipient, 10000000000000000000000);
+        self.erc20._mint(recipient, 10000000000000000000000); // Mint 10,000 tokens
     }
 
-    // #[generate_trait]
     #[external(v0)]
-    impl IReceiptTokenImpl of IReceiptToken<ContractState> {
-        fn burn(ref self: ContractState, value: u256) -> bool {
-            assert(value != 0, Errors::ZERO_AMOUNT);
-            let caller = get_caller_address();
-            self.erc20._burn(caller, value);
-            true
-        }
-
+    impl IBWCReceiptTokenImpl of IBWCReceiptToken<ContractState> {
         fn mint(ref self: ContractState, recipient: ContractAddress, amount: u256) -> bool {
-            assert(amount != 0, Errors::ZERO_AMOUNT);
+            assert(amount != 0, Errors::ZERO_AMOUNT); // Cannot mint 0 tokens
+            assert(!recipient.is_zero(), Errors::ADDRESS_ZERO); // Cannot mint to address 0
+
             self.ownable.assert_only_owner();
-            assert(!recipient.is_zero(), Errors::ADDRESS_ZERO);
             self.erc20._mint(recipient, amount);
+
             true
         }
 
-        fn _transfer(ref self: ContractState, to: ContractAddress, amount: u256) -> bool {
-            self.erc20.transfer(to, amount);
-            true
-        }
-
-
-        fn _approve(ref self: ContractState, spender: ContractAddress, amount: u256) -> bool {
-            assert(amount != 0, Errors::ZERO_AMOUNT);
-            assert(!spender.is_zero(), Errors::ADDRESS_ZERO);
+        fn approve_token(ref self: ContractState, spender: ContractAddress, amount: u256) -> bool {
             let caller = get_caller_address();
+
+            assert(
+                self.erc20.balance_of(caller) >= amount, Errors::INSUFFICIENT_FUND
+            ); // Cannot approve more than token balance
+            assert(amount != 0, Errors::ZERO_AMOUNT); // Cannot approve 0 tokens
+
             self.erc20._approve(caller, spender, amount);
+
             true
         }
 
-        fn _transfer_from(
+        fn transfer_token(ref self: ContractState, to: ContractAddress, amount: u256) -> bool {
+            let caller = get_caller_address();
+
+            assert(
+                self.erc20.balance_of(caller) >= amount, Errors::INSUFFICIENT_FUND
+            ); // Sender must have enough tokens to transfer 
+            assert(amount != 0, Errors::ZERO_AMOUNT); // Cannot transfer 0 tokens
+
+            self.erc20.transfer(to, amount);
+
+            true
+        }
+
+        fn transfer_token_from(
             ref self: ContractState, from: ContractAddress, spender: ContractAddress, amount: u256
         ) -> bool {
+            let caller = get_caller_address();
+
+            assert(amount != 0, Errors::ZERO_AMOUNT); // Cannot transfer 0 tokens
+            assert(
+                self.erc20.allowance(from, caller) >= amount, Errors::AMOUNT_NOT_ALLOWED
+            ); // Caller cannot spend more than allowed amount from owner account     
+            assert(
+                self.erc20.balance_of(from) >= amount, Errors::INSUFFICIENT_FUND
+            ); // Owner must have enough tokens to be transferred
+
             self.erc20.transfer_from(from, spender, amount);
+
             true
+        }
+
+        fn burn(ref self: ContractState, value: u256) -> bool {
+            let caller = get_caller_address();
+
+            assert(value != 0, Errors::ZERO_AMOUNT); // Burn amount cannnot be 0
+            assert(
+                self.erc20.balance_of(caller) >= value, Errors::AMOUNT_NOT_ALLOWED
+            ); // Caller must have enough token to burn
+
+            self.erc20._burn(caller, value); // Burn 'value' from caller account
+
+            true
+        }
+
+        fn balance_of_token(self: @ContractState, account: ContractAddress) -> u256 {
+            self.erc20.balance_of(account)
+        }
+
+        fn allowance_amount(
+            self: @ContractState, spender: ContractAddress, owner: ContractAddress
+        ) -> u256 {
+            self.erc20.allowance(spender, owner)
         }
     }
 }
