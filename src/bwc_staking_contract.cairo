@@ -98,6 +98,7 @@ mod BWCStakingContract {
         const NOT_TOKEN_ADDRESS: felt252 = 'Not token address';
         const ZERO_AMOUNT: felt252 = 'Zero amount';
         const INSUFFICIENT_FUNDS: felt252 = 'Insufficient funds';
+        const LOW_CBWCRT_BALANCE: felt252 = 'low:bal: CBWCRT staking';
         const NOT_WITHDRAW_TIME: felt252 = 'Not yet withdraw time';
         const LOW_CONTRACT_BALANCE: felt252 = 'Low contract balance';
         const AMOUNT_NOT_ALLOWED: felt252 = 'Amount not allowed';
@@ -107,18 +108,18 @@ mod BWCStakingContract {
     fn constructor(
         ref self: ContractState,
         bwcerc20_token_address: ContractAddress,
-        receipt_token_address: ContractAddress,
-        reward_token_address: ContractAddress,
-        amount: u256
+        // receipt_token_address: ContractAddress,
+        // reward_token_address: ContractAddress,
+        // amount: u256
     ) {
         // transfer receipt and reward token to staking contract
         let address_this: ContractAddress = get_contract_address();
         let caller: ContractAddress = get_caller_address();
         self.bwcerc20_token_address.write(bwcerc20_token_address);
-        IBWCReceiptTokenDispatcher { contract_address: receipt_token_address }
-            .transfer_token(address_this, amount);
-        IBWCRewardTokenDispatcher { contract_address: reward_token_address }
-            .transfer_token(address_this, amount);
+        // IBWCReceiptTokenDispatcher { contract_address: receipt_token_address }
+        //     .transfer_token(address_this, amount);
+        // IBWCRewardTokenDispatcher { contract_address: reward_token_address }
+        //     .transfer_token(address_this, amount);
     }
 
     #[external(v0)]
@@ -146,7 +147,7 @@ mod BWCStakingContract {
 
             assert(!caller.is_zero(), Errors::ADDRESS_ZERO); // Caller cannot be address 0
             assert(
-                amount >= bwc_erc20_contract.balance_of_token(caller), Errors::INSUFFICIENT_FUNDS
+                amount <= bwc_erc20_contract.balance_of_token(caller), Errors::INSUFFICIENT_FUNDS
             ); // Caller cannot stake more than token balance
             assert(amount >= 0, Errors::ZERO_AMOUNT); // Cannot stake zero amount
             assert(
@@ -155,7 +156,7 @@ mod BWCStakingContract {
             ); // Address must be BWCERC20 Token address
             assert(
                 receipt_contract.balance_of_token(address_this) >= amount,
-                Errors::INSUFFICIENT_FUNDS
+                Errors::LOW_CBWCRT_BALANCE
             ); // Contract must have enough receipt token to transfer out
 
             // STEP 1: Staker must first allow this contract to spend `amount` of Stake Tokens from staker's account
@@ -256,7 +257,7 @@ mod BWCStakingContract {
         }
     }
 
-
+    #[external(v0)]
     #[generate_trait]
     impl Utility of UtilityTrait {
         // fn calculate_reward(self: ContractState, account: ContractAddress) -> u256 {
