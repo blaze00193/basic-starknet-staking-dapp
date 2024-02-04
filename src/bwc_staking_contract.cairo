@@ -134,11 +134,13 @@ mod BWCStakingContract {
             ); // This contract should be allowed to spend `amount` stake tokens from staker account
 
             // set storage variable
-            let mut stake: StakeDetail = self.staker.read(caller);
-            let stake_time: u64 = get_block_timestamp();
-            stake.time_staked = stake_time;
-            stake.amount = stake.amount + amount; // Increase total amount staked (If staker has staked before)
-            stake.status = true;
+            let prev_stake: StakeDetail = self.staker.read(caller);
+
+            let new_stake: StakeDetail = StakeDetail {
+                time_staked: get_block_timestamp(), amount: prev_stake.amount + amount, status: true
+            };
+
+            self.staker.write(caller, new_stake);
 
             // STEP 2
             // transfer stake token from caller to this contract
@@ -153,7 +155,12 @@ mod BWCStakingContract {
             // Staker calls the approve function of receipt token contract and approves this contract to transfer out `amount` receipt from staker account
             // Reason for this is to allow this contract withdraw the receipt token before sending back stake tokens
 
-            self.emit(Event::TokenStaked(TokenStaked { staker: caller, amount, time: stake_time }));
+            self
+                .emit(
+                    Event::TokenStaked(
+                        TokenStaked { staker: caller, amount, time: get_block_timestamp() }
+                    )
+                );
             true
         }
 
@@ -196,9 +203,15 @@ mod BWCStakingContract {
                 Errors::AMOUNT_NOT_ALLOWED
             ); // Staker has approved this contract to withdraw receipt token from Staker's account
 
-            // Subtract withdraw amount from stake balance
-            stake.amount = stake_amount - amount;
-            self.staker.write(caller, stake);
+            // Update stake detail
+            self
+                .staker
+                .write(
+                    caller,
+                    StakeDetail {
+                        amount: stake_amount - amount, time_staked: stake_time, status: stake.status
+                    }
+                );
 
             // Withdraw receipt token from staker account
             receipt_contract.transfer_from(caller, address_this, amount);
@@ -257,13 +270,6 @@ mod BWCStakingContract {
         }
 
         fn get_reward_token_balance(
-            self: @ContractState, contract_address: ContractAddress, account: ContractAddress
-        ) -> u256 {
-            let reward_contract = IERC20Dispatcher { contract_address };
-            reward_contract.balance_of(account)
-        }
-
-        fn _get_reward_token_balance(
             self: @ContractState, contract_address: ContractAddress, account: ContractAddress
         ) -> u256 {
             let reward_contract = IERC20Dispatcher { contract_address };
