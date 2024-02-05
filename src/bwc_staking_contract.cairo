@@ -43,8 +43,8 @@ mod BWCStakingContract {
     //////////////////
     // CONSTANTS
     //////////////////
-    const MIN_STAKE_TIME: u64 =
-        240000_u64; // Minimun time (in milliseconds) staked token can be withdrawn from pool. Equivalent to 5 minutes (TODO: Change to 1 hour)
+    const MIN_TIME_BEFORE_WITHDRAW: u64 =
+        240_u64; // Minimun time (in seconds) staked token can be withdrawn from pool. Equivalent to 4 minutes (TODO: Change to 1 hour)
 
     /////////////////
     //EVENTS
@@ -85,6 +85,7 @@ mod BWCStakingContract {
         const NOT_WITHDRAW_TIME: felt252 = 'STAKE: Not yet withdraw time';
         const LOW_CONTRACT_BALANCE: felt252 = 'STAKE: Low contract balance';
         const AMOUNT_NOT_ALLOWED: felt252 = 'STAKE: Amount not allowed';
+        const WITHDRAW_AMOUNT_NOT_ALLOWED: felt252 = 'STAKE: Amount not allowed';
     }
 
     #[constructor]
@@ -189,18 +190,20 @@ mod BWCStakingContract {
             let stake_time = stake.time_staked;
 
             assert(
-                amount <= stake_amount, Errors::AMOUNT_NOT_ALLOWED
+                amount <= stake_amount, 'Withdraw amt > than stake amt'
             ); // Staker cannot withdraw more than staked amount
-            assert(self.time_has_passed(stake_time), Errors::NOT_WITHDRAW_TIME);
+            assert(self.is_time_to_withdraw(stake_time), 'Not yet time to withdraw');
             assert(
-                reward_contract.balance_of(address_this) >= amount, Errors::LOW_CONTRACT_BALANCE
+                reward_contract.balance_of(address_this) >= amount,
+                'Not enough reward token to send'
             ); // This contract must have enough reward token to transfer to Staker
             assert(
-                bwc_erc20_contract.balance_of(address_this) >= amount, Errors::NOT_WITHDRAW_TIME
+                bwc_erc20_contract.balance_of(address_this) >= amount,
+                'Not enough BWC token to send'
             ); // This contract must have enough stake token to transfer back to Staker
             assert(
-                receipt_contract.allowance(address_this, caller) >= amount,
-                Errors::AMOUNT_NOT_ALLOWED
+                receipt_contract.allowance(caller, address_this) >= amount,
+                'receipt tkn allowance too low'
             ); // Staker has approved this contract to withdraw receipt token from Staker's account
 
             // Update stake detail
@@ -247,33 +250,32 @@ mod BWCStakingContract {
         //     return reward;
         // }
 
-        fn get_user_stake_balance(self: @ContractState) -> u256 {
-            let caller: ContractAddress = get_caller_address();
-            self.staker.read(caller).amount
-        }
-
-        fn time_has_passed(self: @ContractState, time: u64) -> bool {
+        fn is_time_to_withdraw(self: @ContractState, stake_time: u64) -> bool {
             let now = get_block_timestamp();
+            let withdraw_time = stake_time + MIN_TIME_BEFORE_WITHDRAW;
 
-            if (time > now) {
+            if (now >= withdraw_time) {
                 true
             } else {
                 false
             }
         }
 
-        fn get_receipt_token_balance(
-            self: @ContractState, contract_address: ContractAddress, account: ContractAddress
-        ) -> u256 {
-            let receipt_contract = IERC20Dispatcher { contract_address };
-            receipt_contract.balance_of(account)
-        }
+        fn get_next_withdraw_time(self: @ContractState) -> u64 {
+            let caller = get_caller_address();
+            let stake: StakeDetail = self.staker.read(caller);
+            let stake_time = stake.time_staked;
+            let next_stake_time = stake_time + MIN_TIME_BEFORE_WITHDRAW;
 
-        fn get_reward_token_balance(
-            self: @ContractState, contract_address: ContractAddress, account: ContractAddress
-        ) -> u256 {
-            let reward_contract = IERC20Dispatcher { contract_address };
-            reward_contract.balance_of(account)
+            next_stake_time
         }
     }
 }
+
+// TODO: 
+// 1. Make error messages more descriptive
+// 2. Add a util function to check if user has staked at any point in time
+// 3. Add a util function to check amount a user staked
+// 4. Convert non-custom errors to custom errors
+// 5. Add util function to check the last time a user staked
+
